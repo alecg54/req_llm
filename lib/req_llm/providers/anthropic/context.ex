@@ -74,9 +74,18 @@ defmodule ReqLLM.Providers.Anthropic.Context do
     text_blocks = encode_content(content)
     tool_blocks = Enum.map(tool_calls, &encode_tool_call_to_tool_use/1)
 
+    combined = combine_content_blocks(text_blocks, tool_blocks)
+
+    require Logger
+    Logger.debug("Encoding assistant message with tools:")
+    Logger.debug("  Content parts: #{inspect(content)}")
+    Logger.debug("  Text blocks: #{inspect(text_blocks)}")
+    Logger.debug("  Tool blocks: #{inspect(tool_blocks)}")
+    Logger.debug("  Combined: #{inspect(combined)}")
+
     %{
       role: "assistant",
-      content: combine_content_blocks(text_blocks, tool_blocks)
+      content: combined
     }
   end
 
@@ -169,6 +178,15 @@ defmodule ReqLLM.Providers.Anthropic.Context do
         data: base64
       }
     }
+  end
+
+  defp encode_content_part(%ReqLLM.Message.ContentPart{type: :thinking, text: text, signature: signature}) do
+    require Logger
+    Logger.debug("Encoding thinking part: text=#{String.slice(text, 0, 50)}..., signature=#{inspect(signature)}")
+    base = %{type: "thinking", thinking: text}
+    result = if signature, do: Map.put(base, :signature, signature), else: base
+    Logger.debug("Encoded thinking result: #{inspect(result)}")
+    result
   end
 
   defp encode_content_part(_), do: nil

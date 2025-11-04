@@ -149,12 +149,12 @@ defmodule ReqLLM.Providers.Anthropic.Response do
     ReqLLM.StreamChunk.text(text)
   end
 
-  defp decode_content_block(%{"type" => "thinking", "thinking" => text}) do
-    ReqLLM.StreamChunk.thinking(text)
-  end
+  defp decode_content_block(%{"type" => "thinking"} = block) do
+    text = Map.get(block, "thinking") || Map.get(block, "text") || ""
+    signature = Map.get(block, "signature")
 
-  defp decode_content_block(%{"type" => "thinking", "text" => text}) do
-    ReqLLM.StreamChunk.thinking(text)
+    metadata = if signature, do: %{signature: signature}, else: %{}
+    ReqLLM.StreamChunk.thinking(text, metadata)
   end
 
   defp decode_content_block(%{"type" => "tool_use", "id" => id, "name" => name, "input" => input}) do
@@ -178,6 +178,13 @@ defmodule ReqLLM.Providers.Anthropic.Response do
     [ReqLLM.StreamChunk.thinking(text)]
   end
 
+  defp decode_content_block_delta(%{"type" => "signature_delta", "signature" => signature}, _index)
+       when is_binary(signature) do
+    # Signature deltas come just before content_block_stop for thinking blocks
+    # Send as metadata on a thinking chunk with empty text so it accumulates properly
+    [ReqLLM.StreamChunk.thinking("", %{signature_fragment: signature})]
+  end
+
   defp decode_content_block_delta(
          %{"type" => "input_json_delta", "partial_json" => fragment},
          index
@@ -193,12 +200,12 @@ defmodule ReqLLM.Providers.Anthropic.Response do
     [ReqLLM.StreamChunk.text(text)]
   end
 
-  defp decode_content_block_start(%{"type" => "thinking", "thinking" => text}, _index) do
-    [ReqLLM.StreamChunk.thinking(text)]
-  end
+  defp decode_content_block_start(%{"type" => "thinking"} = block, _index) do
+    text = Map.get(block, "thinking") || Map.get(block, "text") || ""
+    signature = Map.get(block, "signature")
 
-  defp decode_content_block_start(%{"type" => "thinking", "text" => text}, _index) do
-    [ReqLLM.StreamChunk.thinking(text)]
+    metadata = if signature, do: %{signature: signature}, else: %{}
+    [ReqLLM.StreamChunk.thinking(text, metadata)]
   end
 
   defp decode_content_block_start(%{"type" => "tool_use", "id" => id, "name" => name}, index) do
@@ -237,8 +244,9 @@ defmodule ReqLLM.Providers.Anthropic.Response do
     %ReqLLM.Message.ContentPart{type: :text, text: text}
   end
 
-  defp chunk_to_content_part(%ReqLLM.StreamChunk{type: :thinking, text: text}) do
-    %ReqLLM.Message.ContentPart{type: :thinking, text: text}
+  defp chunk_to_content_part(%ReqLLM.StreamChunk{type: :thinking, text: text, metadata: metadata}) do
+    signature = Map.get(metadata, :signature)
+    %ReqLLM.Message.ContentPart{type: :thinking, text: text, signature: signature}
   end
 
   defp chunk_to_content_part(_), do: nil

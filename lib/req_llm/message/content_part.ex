@@ -24,6 +24,7 @@ defmodule ReqLLM.Message.ContentPart do
     field(:data, binary() | nil, default: nil)
     field(:media_type, String.t() | nil, default: nil)
     field(:filename, String.t() | nil, default: nil)
+    field(:signature, String.t() | nil, default: nil)
     field(:metadata, map(), default: %{})
   end
 
